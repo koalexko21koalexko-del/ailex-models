@@ -30,24 +30,22 @@ jobs:
 
           today = datetime.now().strftime("%d %B %Y")
 
-          # --- Получаем токен GitHub из окружения ---
+          # --- Токен GitHub ---
           github_token = os.environ.get("GITHUB_TOKEN")
           if not github_token:
               print("Ошибка: GITHUB_TOKEN не найден")
               sys.exit(1)
 
-          # --- Запрос к GitHub Models API (как в успешном тесте) ---
+          # --- Запрос к GitHub Models ---
           print("Генерация поста через GitHub Models...")
 
-          url = "https://api.github.com/chat/completions"
-
+          url = "https://models.inference.ai.azure.com/chat/completions"
           headers = {
               "Authorization": f"Bearer {github_token}",
               "Content-Type": "application/json"
           }
-
           payload = {
-              "model": "deepseek-ai/DeepSeek-R1",
+              "model": "DeepSeek-R1",
               "messages": [
                   {
                       "role": "system",
@@ -77,13 +75,7 @@ jobs:
               response.raise_for_status()
               result = response.json()
               post_text = result["choices"][0]["message"]["content"]
-
-              if not post_text:
-                  print("Не удалось сгенерировать пост.")
-                  sys.exit(1)
-
               print("Пост сгенерирован.")
-
           except Exception as e:
               print(f"Ошибка при обращении к GitHub Models: {e}")
               sys.exit(1)
@@ -103,7 +95,6 @@ jobs:
               "parse_mode": "HTML",
           }
 
-          print("Отправка поста в канал...")
           response = requests.post(telegram_api_url, json=payload)
 
           if response.status_code == 200:
