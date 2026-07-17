@@ -8,6 +8,9 @@ on:
 jobs:
   post-to-telegram:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      models: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -30,13 +33,11 @@ jobs:
 
           today = datetime.now().strftime("%d %B %Y")
 
-          # --- Токен GitHub ---
           github_token = os.environ.get("GITHUB_TOKEN")
           if not github_token:
               print("Ошибка: GITHUB_TOKEN не найден")
               sys.exit(1)
 
-          # --- Запрос к GitHub Models ---
           print("Генерация поста через GitHub Models...")
 
           url = "https://models.inference.ai.azure.com/chat/completions"
@@ -80,7 +81,6 @@ jobs:
               print(f"Ошибка при обращении к GitHub Models: {e}")
               sys.exit(1)
 
-          # --- Отправка в Telegram ---
           telegram_token = os.environ.get("TELEGRAM_BOT_TOKEN")
           chat_id = os.environ.get("TELEGRAM_CHAT_ID")
 
