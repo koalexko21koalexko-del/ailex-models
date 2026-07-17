@@ -1,10 +1,12 @@
-name: Тест GitHub Models API
+name: Ежедневный пост в Telegram
 
 on:
+  schedule:
+    - cron: "0 6 * * *"
   workflow_dispatch:
 
 jobs:
-  test-models:
+  post-to-telegram:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -18,41 +20,103 @@ jobs:
       - name: Install dependencies
         run: pip install requests
 
-      - name: Test GitHub Models
+      - name: Create Python script
         run: |
-          python -c "
+          cat > post_generator.py << 'EOF'
           import requests
           import os
           import sys
+          from datetime import datetime
 
-          token = os.environ.get('GITHUB_TOKEN')
-          if not token:
-              print('❌ GITHUB_TOKEN не найден')
+          today = datetime.now().strftime("%d %B %Y")
+
+          # --- Получаем токен GitHub из окружения ---
+          github_token = os.environ.get("GITHUB_TOKEN")
+          if not github_token:
+              print("Ошибка: GITHUB_TOKEN не найден")
               sys.exit(1)
 
-          url = 'https://api.github.com/chat/completions'
+          # --- Запрос к GitHub Models API (как в успешном тесте) ---
+          print("Генерация поста через GitHub Models...")
+
+          url = "https://api.github.com/chat/completions"
+
           headers = {
-              'Authorization': f'Bearer {token}',
-              'Content-Type': 'application/json'
+              "Authorization": f"Bearer {github_token}",
+              "Content-Type": "application/json"
           }
+
           payload = {
-              'model': 'deepseek-ai/DeepSeek-R1',
-              'messages': [
-                  {'role': 'user', 'content': 'Напиши одно предложение о Таро.'}
+              "model": "deepseek-ai/DeepSeek-R1",
+              "messages": [
+                  {
+                      "role": "system",
+                      "content": (
+                          "Ты — AiLex, таролог с 25-летним стажем. "
+                          "Ты пишешь посты для Telegram-канала 'Школа Таро с AiLex'. "
+                          "Твой стиль — образный, философский, как разговор у камина. "
+                          "Не используй списки, инструкции и не будь слишком 'учебным'."
+                      )
+                  },
+                  {
+                      "role": "user",
+                      "content": (
+                          f"Сегодня {today}. "
+                          "Придумай пост для канала с 'Картой дня'. "
+                          "Выбери одну карту Таро и опиши её значение для сегодняшнего дня. "
+                          "Сделай текст тёплым, личным и вдохновляющим, на 200-300 слов."
+                      )
+                  }
               ],
-              'max_tokens': 50
+              "temperature": 0.7,
+              "max_tokens": 800
           }
 
           try:
-              response = requests.post(url, headers=headers, json=payload, timeout=30)
-              print(f'Статус ответа: {response.status_code}')
-              print(f'Ответ: {response.text[:500]}')
-              if response.status_code == 200:
-                  print('✅ Успешно!')
-              else:
-                  print('❌ Ошибка!')
+              response = requests.post(url, headers=headers, json=payload, timeout=60)
+              response.raise_for_status()
+              result = response.json()
+              post_text = result["choices"][0]["message"]["content"]
+
+              if not post_text:
+                  print("Не удалось сгенерировать пост.")
+                  sys.exit(1)
+
+              print("Пост сгенерирован.")
+
           except Exception as e:
-              print(f'❌ Исключение: {e}')
-          "
+              print(f"Ошибка при обращении к GitHub Models: {e}")
+              sys.exit(1)
+
+          # --- Отправка в Telegram ---
+          telegram_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+          chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+
+          if not telegram_token or not chat_id:
+              print("Ошибка: не найдены токен или ID канала.")
+              sys.exit(1)
+
+          telegram_api_url = f"https://api.telegram.org/bot{telegram_token}/sendMessage"
+          payload = {
+              "chat_id": chat_id,
+              "text": post_text,
+              "parse_mode": "HTML",
+          }
+
+          print("Отправка поста в канал...")
+          response = requests.post(telegram_api_url, json=payload)
+
+          if response.status_code == 200:
+              print("✅ Пост успешно отправлен в Telegram!")
+          else:
+              print(f"❌ Ошибка при отправке: {response.status_code}")
+              print(response.text)
+              sys.exit(1)
+          EOF
+
+      - name: Run script
+        run: python post_generator.py
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
